@@ -24,7 +24,7 @@ export default function Sidebar() {
       <div className="sidebar-header">
         <div className="logo">
           <div className="logo-icon"><i className="fas fa-bolt" /></div>
-          <span className="logo-text">RetailPro</span>
+          <span className="logo-text">VD Softwares</span>
         </div>
         <button
           className="sidebar-toggle"

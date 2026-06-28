@@ -158,11 +158,11 @@ async function migrate() {
 
     // ── Default Settings ────────────────────────────────────────────────────
     const defaultSettings = [
-      ['storeName', '"My Retail Store"'],
-      ['storeAddress', '"123 Main Street"'],
-      ['storePhone', '"+1 234 567 890"'],
-      ['storeEmail', '"store@retailpro.com"'],
-      ['storeGST', '""'],
+      ['storeName', '"AYYANAR METAL"'],
+      ['storeAddress', '"No 203, East Veli Street, Madurai-625 001"'],
+      ['storePhone', '"9843922866"'],
+      ['storeEmail', '""'],
+      ['storeGST', '"33AXRPS4855R2Z9"'],
       ['currency', '"₹"'],
       ['currencyCode', '"INR"'],
       ['taxRates', JSON.stringify([{ name: 'GST 5%', rate: 5 }, { name: 'GST 12%', rate: 12 }, { name: 'GST 18%', rate: 18 }])],

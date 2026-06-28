@@ -34,7 +34,7 @@ export function AppProvider({ children }) {
     if (user) {
       Store.getSettings().then(s => {
         if (s) {
-          setStoreName(s.storeName || 'RetailPro');
+          setStoreName(s.storeName || 'VD Softwares');
           setSettings(s);
           Utils.setCurrencySymbol(s.currency);
         }

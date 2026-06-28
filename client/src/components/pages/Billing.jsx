@@ -57,10 +57,54 @@ function Receipt({ inv, onClose, onPrint }) {
   )
 }
 
+const TRANSLATIONS = {
+  en: {
+    bill: 'TAX INVOICE',
+    invoiceNo: 'Invoice No',
+    date: 'Date',
+    customer: 'Customer',
+    walkIn: 'Walk-in Customer',
+    item: 'Item',
+    qty: 'Qty',
+    rate: 'Rate',
+    amount: 'Amount',
+    subtotal: 'Subtotal',
+    tax: 'Tax',
+    discount: 'Discount',
+    total: 'TOTAL',
+    payment: 'Payment',
+    thankyou: 'Thank you for shopping with us!',
+    gst: 'GST',
+  },
+  ta: {
+    bill: 'வரி விலைப்பட்டியல்',
+    invoiceNo: 'விலைப்பட்டியல் எண்',
+    date: 'தேதி',
+    customer: 'வாடிக்கையாளர்',
+    walkIn: 'நேரடி வாடிக்கையாளர்',
+    item: 'பொருள்',
+    qty: 'அளவு',
+    rate: 'விலை',
+    amount: 'தொகை',
+    subtotal: 'உப மொத்தம்',
+    tax: 'வரி',
+    discount: 'தள்ளுபடி',
+    total: 'மொத்தம்',
+    payment: 'கட்டணம்',
+    thankyou: 'எங்களுடன் கொள்முதல் செய்ததற்கு நன்றி!',
+    gst: 'ஜிஎஸ்டி',
+  }
+}
+
 export default function Billing() {
   const { cart, setCart, posDiscount, setPosDiscount, posDiscountType, setPosDiscountType, openModal, closeModal, toast, addToCartById, settings } = useApp()
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('')
+  const [billLang, setBillLang] = useState('en')
+  const [showHeld, setShowHeld] = useState(false)
+  const [heldBills, setHeldBills] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('heldBills') || '[]') } catch { return [] }
+  })
 
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
@@ -112,23 +156,120 @@ export default function Billing() {
     })
   }
 
+  const updatePrice = (idx, value) => {
+    setCart(prev => {
+      const updated = [...prev]
+      const item = { ...updated[idx] }
+      const parsed = parseFloat(value)
+      item.price = isNaN(parsed) || parsed < 0 ? 0 : parsed
+      updated[idx] = item
+      return updated
+    })
+  }
+
+  const holdBill = () => {
+    if (cart.length === 0) { toast('Cart is empty — nothing to hold', 'warning'); return }
+    const label = `Hold #${heldBills.length + 1} (${cart.length} item${cart.length > 1 ? 's' : ''})`
+    const held = { id: Date.now(), label, cart, posDiscount, posDiscountType }
+    const updated = [...heldBills, held]
+    setHeldBills(updated)
+    localStorage.setItem('heldBills', JSON.stringify(updated))
+    setCart([])
+    setPosDiscount(0)
+    setPosDiscountType('%')
+    setShowHeld(true)
+    toast(`Bill held: ${label}`, 'success')
+  }
+
+  const resumeBill = (id) => {
+    const bill = heldBills.find(h => h.id === id)
+    if (!bill) return
+    if (cart.length > 0 && !window.confirm('Current cart will be cleared. Resume held bill?')) return
+    setCart(bill.cart)
+    setPosDiscount(bill.posDiscount)
+    setPosDiscountType(bill.posDiscountType)
+    const updated = heldBills.filter(h => h.id !== id)
+    setHeldBills(updated)
+    localStorage.setItem('heldBills', JSON.stringify(updated))
+    setShowHeld(false)
+    toast(`Resumed: ${bill.label}`, 'success')
+  }
+
+  const deleteHeld = (id) => {
+    const updated = heldBills.filter(h => h.id !== id)
+    setHeldBills(updated)
+    localStorage.setItem('heldBills', JSON.stringify(updated))
+    toast('Held bill removed', 'info')
+  }
+
   const handleAddToCart = (productId) => {
     addToCartById(productId)
   }
 
   const printReceipt = (inv) => {
-    const s = settings || { storeName: 'RetailPro', storeAddress: '', storePhone: '', currency: '₹' }
-    const printHtml = `<html><head><style>body{font-family:monospace;font-size:12px;max-width:300px;margin:0 auto;padding:10px}table{width:100%;border-collapse:collapse}td,th{padding:3px 0;text-align:left}th{border-bottom:1px solid #000}.total{font-size:16px;font-weight:bold;border-top:2px solid #000;padding-top:6px}.right{text-align:right}.center{text-align:center}hr{border:none;border-top:1px dashed #000}</style></head><body>
-      <div class="center"><strong>${s.storeName}</strong><br>${s.storeAddress}<br>${s.storePhone}</div><hr>
-      <div>${inv.invoiceNumber} | ${Utils.formatDateTime(inv.createdAt)}<br>Customer: ${inv.customerName}</div><hr>
-      <table><tr><th>Item</th><th class="right">Qty</th><th class="right">Amt</th></tr>${inv.items.map(i => `<tr><td>${i.name}</td><td class="right">${i.qty}</td><td class="right">${i.total.toFixed(2)}</td></tr>`).join('')}</table><hr>
-      <div>Subtotal: <span style="float:right">${inv.subtotal.toFixed(2)}</span></div>
-      <div>Tax: <span style="float:right">${inv.taxAmount.toFixed(2)}</span></div>
-      ${inv.discount > 0 ? `<div>Discount: <span style="float:right">-${inv.discount.toFixed(2)}</span></div>` : ''}
-      <div class="total">TOTAL: <span style="float:right">${s.currency} ${inv.total.toFixed(2)}</span></div>
-      <div>Payment: ${inv.paymentMethod}</div><hr><div class="center">Thank you!</div>
-      <script>window.onload=function(){window.print()}<\/script></body></html>`
-    const w = window.open('', '_blank', 'width=350,height=500')
+    const s = settings || { storeName: 'RetailPro', storeAddress: '', storePhone: '', storeGST: '', currency: '₹' }
+    const t = TRANSLATIONS[billLang]
+    const isTamil = billLang === 'ta'
+    const fontLink = isTamil
+      ? `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil&display=swap" rel="stylesheet">`
+      : ''
+    const fontFamily = isTamil ? `'Noto Sans Tamil', sans-serif` : `'Segoe UI', Arial, sans-serif`
+    const printHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">${fontLink}<style>
+      @page { size: A4; margin: 18mm 20mm; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: ${fontFamily}; font-size: 13px; color: #111; background: #fff; }
+      .header { text-align: center; margin-bottom: 14px; }
+      .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+      .header p { font-size: 12px; color: #444; line-height: 1.5; }
+      .bill-title { text-align: center; font-size: 15px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; border-top: 2px solid #111; border-bottom: 2px solid #111; padding: 6px 0; margin: 12px 0; }
+      .meta { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 14px; }
+      .meta div { line-height: 1.8; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+      thead tr { background: #111; color: #fff; }
+      thead th { padding: 7px 8px; font-size: 12px; text-align: left; }
+      tbody tr:nth-child(even) { background: #f7f7f7; }
+      tbody td { padding: 6px 8px; font-size: 12px; border-bottom: 1px solid #e0e0e0; }
+      .right { text-align: right; }
+      .center { text-align: center; }
+      .summary { margin-left: auto; width: 260px; margin-top: 8px; }
+      .summary-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px dashed #ccc; }
+      .summary-total { display: flex; justify-content: space-between; padding: 8px 0; font-size: 16px; font-weight: 800; border-top: 2px solid #111; margin-top: 4px; }
+      .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #555; border-top: 1px dashed #aaa; padding-top: 12px; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    </style></head><body>
+    <div class="header">
+      <h1>${s.storeName}</h1>
+      <p>${s.storeAddress}<br>${s.storePhone}${s.storeEmail ? ' | ' + s.storeEmail : ''}${s.storeGST ? '<br>' + t.gst + ': ' + s.storeGST : ''}</p>
+    </div>
+    <div class="bill-title">${t.bill}</div>
+    <div class="meta">
+      <div><strong>${t.invoiceNo}:</strong> ${inv.invoiceNumber}<br><strong>${t.customer}:</strong> ${inv.customerName || t.walkIn}</div>
+      <div style="text-align:right"><strong>${t.date}:</strong> ${Utils.formatDateTime(inv.createdAt)}<br><strong>${t.payment}:</strong> ${inv.paymentMethod}</div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>${t.item}</th>
+        <th class="right">${t.rate}</th>
+        <th class="center">${t.qty}</th>
+        <th class="right">${t.amount}</th>
+      </tr></thead>
+      <tbody>${inv.items.map((i, idx) => `<tr>
+        <td>${idx + 1}</td><td>${i.name}</td>
+        <td class="right">${s.currency} ${Number(i.price).toFixed(2)}</td>
+        <td class="center">${i.qty}</td>
+        <td class="right">${s.currency} ${Number(i.total).toFixed(2)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    <div class="summary">
+      <div class="summary-row"><span>${t.subtotal}</span><span>${s.currency} ${inv.subtotal.toFixed(2)}</span></div>
+      <div class="summary-row"><span>${t.tax}</span><span>${s.currency} ${inv.taxAmount.toFixed(2)}</span></div>
+      ${inv.discount > 0 ? `<div class="summary-row"><span>${t.discount}</span><span>- ${s.currency} ${inv.discount.toFixed(2)}</span></div>` : ''}
+      <div class="summary-total"><span>${t.total}</span><span>${s.currency} ${inv.total.toFixed(2)}</span></div>
+    </div>
+    <div class="footer">${t.thankyou}</div>
+    <script>window.onload=function(){window.print()}<\/script>
+    </body></html>`
+    const w = window.open('', '_blank')
     w.document.write(printHtml)
     w.document.close()
   }
@@ -228,10 +369,63 @@ export default function Billing() {
       <div className="pos-cart">
         <div className="pos-cart-header">
           <span><i className="fas fa-shopping-cart" style={{ marginRight: 8 }} />Cart ({cart.reduce((s, c) => s + c.qty, 0)} items)</span>
-          <button className="btn btn-sm btn-secondary" onClick={() => setCart([])}>
-            <i className="fas fa-trash" /> Clear
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              className="btn btn-sm"
+              title="Hold current bill"
+              style={{ background: 'rgba(253,203,110,0.15)', color: '#fdcb6e', border: '1px solid rgba(253,203,110,0.3)' }}
+              onClick={holdBill}
+            >
+              <i className="fas fa-pause-circle" /> Hold
+            </button>
+            {heldBills.length > 0 && (
+              <button
+                className="btn btn-sm"
+                title="View held bills"
+                style={{ background: 'rgba(108,92,231,0.15)', color: 'var(--accent-light)', border: '1px solid rgba(108,92,231,0.3)', position: 'relative' }}
+                onClick={() => setShowHeld(p => !p)}
+              >
+                <i className="fas fa-layer-group" />
+                <span style={{ marginLeft: 4 }}>Held</span>
+                <span style={{ marginLeft: 4, background: 'var(--accent)', color: '#fff', borderRadius: '50%', fontSize: '.65rem', padding: '1px 6px', fontWeight: 700 }}>{heldBills.length}</span>
+              </button>
+            )}
+            <button className="btn btn-sm btn-secondary" onClick={() => setCart([])}>
+              <i className="fas fa-trash" /> Clear
+            </button>
+          </div>
         </div>
+
+        {/* Held Bills Panel */}
+        {showHeld && heldBills.length > 0 && (
+          <div style={{ margin: '0 0 8px 0', background: 'rgba(108,92,231,0.08)', border: '1px solid rgba(108,92,231,0.2)', borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Held Bills</div>
+            {heldBills.map(h => (
+              <div key={h.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', marginBottom: 4, background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div>
+                  <div style={{ fontSize: '.82rem', fontWeight: 600 }}>{h.label}</div>
+                  <div style={{ fontSize: '.72rem', color: 'var(--text-muted)' }}>{h.cart.length} item{h.cart.length > 1 ? 's' : ''} · ₹{h.cart.reduce((s, c) => s + c.price * c.qty, 0).toFixed(2)}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn btn-sm"
+                    style={{ background: 'rgba(0,184,148,0.15)', color: '#00b894', border: '1px solid rgba(0,184,148,0.3)', padding: '3px 10px', fontSize: '.78rem' }}
+                    onClick={() => resumeBill(h.id)}
+                  >
+                    <i className="fas fa-play" /> Resume
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    style={{ padding: '3px 8px', fontSize: '.78rem' }}
+                    onClick={() => deleteHeld(h.id)}
+                  >
+                    <i className="fas fa-times" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="pos-cart-items">
           {cart.length === 0 ? (
@@ -244,7 +438,30 @@ export default function Billing() {
             <div key={idx} className="cart-item">
               <div className="cart-item-info">
                 <div className="cart-item-name">{c.name}</div>
-                <div className="cart-item-price">{Utils.currency(c.price)} × {c.qty}</div>
+                <div className="cart-item-price" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: '.7rem', color: 'var(--text-muted)' }}>Rate:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={c.price === 0 ? '' : c.price}
+                    placeholder="0"
+                    onFocus={e => e.target.select()}
+                    onChange={e => updatePrice(idx, e.target.value)}
+                    onBlur={e => { if (e.target.value === '') updatePrice(idx, 0) }}
+                    style={{
+                      width: 70,
+                      padding: '2px 6px',
+                      fontSize: '.82rem',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      background: 'var(--bg-card)',
+                      color: 'var(--text-primary)',
+                      textAlign: 'right'
+                    }}
+                  />
+                  <span style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>× {c.qty}</span>
+                </div>
               </div>
               <div className="cart-item-qty">
                 <button onClick={() => updateQty(idx, -1)}><i className="fas fa-minus" /></button>
@@ -265,9 +482,11 @@ export default function Billing() {
             <input
               type="number"
               placeholder="Discount"
-              value={posDiscount}
+              value={posDiscount === 0 ? '' : posDiscount}
               min={0}
+              onFocus={e => e.target.select()}
               onChange={e => setPosDiscount(parseFloat(e.target.value) || 0)}
+              onBlur={e => { if (e.target.value === '') setPosDiscount(0) }}
             />
             <select value={posDiscountType} onChange={e => setPosDiscountType(e.target.value)}>
               <option value="%">%</option>
@@ -288,6 +507,19 @@ export default function Billing() {
             <label style={{ fontSize: '.8rem', color: 'var(--text-secondary)' }}>Payment Method</label>
             <select id="pos-payment" style={{ width: '100%', marginTop: 4, height: 40 }}>
               {(s.paymentMethods || ['Cash', 'Card', 'UPI']).map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <label style={{ fontSize: '.8rem', color: 'var(--text-secondary)' }}>
+              <i className="fas fa-language" style={{ marginRight: 5 }} />Bill Language
+            </label>
+            <select
+              value={billLang}
+              onChange={e => setBillLang(e.target.value)}
+              style={{ width: '100%', marginTop: 4, height: 40 }}
+            >
+              <option value="en">🇬🇧 English</option>
+              <option value="ta">🇮🇳 Tamil (தமிழ்)</option>
             </select>
           </div>
           <button
